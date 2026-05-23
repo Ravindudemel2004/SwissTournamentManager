@@ -17,6 +17,9 @@ const ExportManager = (function () {
             reject(new Error('Invalid tournament file format'));
             return;
           }
+          if (!data.tournamentId) {
+            data.tournamentId = Storage.generateTournamentId();
+          }
           resolve(data);
         } catch (err) {
           reject(new Error('Could not parse JSON file'));

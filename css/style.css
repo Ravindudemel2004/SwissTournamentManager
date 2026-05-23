@@ -932,3 +932,32 @@ tbody tr:last-child td {
   border: 1px solid rgba(34, 197, 94, 0.3);
   color: var(--success);
 }
+
+/* Saved tournaments list */
+.saved-tournament-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  background: var(--bg-primary);
+  transition: border-color var(--transition);
+}
+
+.saved-tournament-item:hover {
+  border-color: var(--accent);
+}
+
+.saved-tournament-item.active {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.saved-tournament-info strong {
+  display: inline-block;
+  margin-right: 0.5rem;
+}

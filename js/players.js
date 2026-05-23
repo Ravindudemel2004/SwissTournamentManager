@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('importJsonInput')?.addEventListener('change', handleImport);
+    document.getElementById('importExcelInput')?.addEventListener('change', handleExcelSelect);
     document.getElementById('btnExportJson')?.addEventListener('click', () => {
       ExportManager.exportJSON(state);
       App.toast('Tournament exported', 'success');
@@ -51,6 +52,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btnImportJson')?.addEventListener('click', () => {
       document.getElementById('importJsonInput')?.click();
     });
+    document.getElementById('btnImportExcel')?.addEventListener('click', () => {
+      document.getElementById('importExcelInput')?.click();
+    });
+    document.getElementById('btnDownloadExcelTemplate')?.addEventListener('click', () => {
+      try {
+        ExcelImport.downloadTemplate();
+        App.toast('Template downloaded', 'success');
+      } catch (e) {
+        App.toast(e.message, 'error');
+      }
+    });
+    document.getElementById('btnConfirmExcelImport')?.addEventListener('click', confirmExcelImport);
+    App.setupModalClose('excelImportModal');
   }
 
   function getFilteredPlayers() {
@@ -239,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
       App.showLoading('Importing tournament...');
       const data = await ExportManager.importJSON(file);
       App.setState(data);
+      Storage.saveTournamentToLibrary(data);
       state = App.getState();
       App.hideLoading();
       App.toast('Tournament imported successfully', 'success');
@@ -248,5 +263,84 @@ document.addEventListener('DOMContentLoaded', () => {
       App.toast(err.message, 'error');
     }
     e.target.value = '';
+  }
+
+  let pendingExcelImport = null;
+
+  async function handleExcelSelect(e) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+
+    try {
+      App.showLoading('Reading Excel file...');
+      const result = await ExcelImport.importPlayers(file);
+      App.hideLoading();
+      pendingExcelImport = result;
+      showExcelPreview(result);
+    } catch (err) {
+      App.hideLoading();
+      App.toast(err.message, 'error');
+    }
+  }
+
+  function showExcelPreview(result) {
+    const preview = document.getElementById('excelImportPreview');
+    const warnings = document.getElementById('excelImportWarnings');
+    if (!preview) return;
+
+    preview.innerHTML = `
+      <p><strong>${result.players.length}</strong> players found in file.</p>
+      <div class="table-wrapper" style="max-height:200px;margin-top:0.75rem">
+        <table>
+          <thead><tr><th>Name</th><th>Rating</th><th>Club</th><th>Active</th></tr></thead>
+          <tbody>
+            ${result.players
+              .slice(0, 10)
+              .map(
+                (p) =>
+                  `<tr><td>${App.escapeHtml(p.name)}</td><td>${p.rating}</td><td>${App.escapeHtml(p.club)}</td><td>${p.active ? 'Yes' : 'No'}</td></tr>`
+              )
+              .join('')}
+            ${result.players.length > 10 ? `<tr><td colspan="4">…and ${result.players.length - 10} more</td></tr>` : ''}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    if (warnings) {
+      warnings.innerHTML =
+        result.errors && result.errors.length
+          ? `<div class="alert alert-warning">${result.errors.slice(0, 5).join('<br>')}</div>`
+          : '';
+    }
+
+    App.openModal('excelImportModal');
+  }
+
+  async function confirmExcelImport() {
+    if (!pendingExcelImport) return;
+
+    const mode = document.querySelector('input[name="excelImportMode"]:checked')?.value || 'append';
+
+    if (mode === 'replace') {
+      const ok = await App.confirm(
+        'Replace all current players with the Excel list?',
+        'Replace Players'
+      );
+      if (!ok) return;
+    }
+
+    try {
+      state = App.getState();
+      ExcelImport.applyPlayersToState(state, pendingExcelImport.players, mode);
+      App.save();
+      pendingExcelImport = null;
+      App.closeModal('excelImportModal');
+      App.toast(`Imported players (${mode === 'replace' ? 'replaced' : 'added'})`, 'success');
+      render();
+    } catch (err) {
+      App.toast(err.message, 'error');
+    }
   }
 });

@@ -1,7 +1,8 @@
 /**
- * LocalStorage persistence for Swiss Tournament Manager
+ * LocalStorage persistence + saved tournament library
  */
 const STORAGE_KEY = 'swissTournamentManager';
+const LIBRARY_KEY = 'swissTournamentManager_library';
 
 const Storage = (function () {
   const defaultSettings = {
@@ -15,26 +16,175 @@ const Storage = (function () {
     tieBreakOrder: ['buchholz', 'sonneborn', 'rating']
   };
 
-  function createDefaultState() {
+  function createDefaultState(name) {
     return {
-      settings: { ...defaultSettings },
+      tournamentId: generateTournamentId(),
+      settings: { ...defaultSettings, name: name || defaultSettings.name },
       players: [],
       rounds: [],
       currentRound: 0,
       darkMode: true,
-      version: 1
+      version: 2
     };
   }
 
-  function load() {
+  function generateTournamentId() {
+    return 't_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+  }
+
+  function generateId() {
+    return 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+  }
+
+  /* ---------- Library ---------- */
+
+  function loadLibrary() {
+    try {
+      const raw = localStorage.getItem(LIBRARY_KEY);
+      if (!raw) return { version: 2, tournaments: [] };
+      const data = JSON.parse(raw);
+      return {
+        version: 2,
+        tournaments: Array.isArray(data.tournaments) ? data.tournaments : []
+      };
+    } catch (e) {
+      return { version: 2, tournaments: [] };
+    }
+  }
+
+  function saveLibrary(library) {
+    try {
+      localStorage.setItem(LIBRARY_KEY, JSON.stringify(library));
+      return true;
+    } catch (e) {
+      console.error('Failed to save tournament library:', e);
+      return false;
+    }
+  }
+
+  function migrateOldStorageToLibrary() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return createDefaultState();
+      if (!raw) return;
       const data = JSON.parse(raw);
-      return migrate(mergeDefaults(data));
+      const library = loadLibrary();
+      const tid = data.tournamentId || generateTournamentId();
+      data.tournamentId = tid;
+      const exists = library.tournaments.some((t) => t.id === tid);
+      if (!exists) {
+        library.tournaments.push({
+          id: tid,
+          name: (data.settings && data.settings.name) || 'Chess Tournament',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          state: migrate(mergeDefaults(data))
+        });
+        saveLibrary(library);
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrate(mergeDefaults(data))));
+    } catch (e) {
+      console.error('Migration error:', e);
+    }
+  }
+
+  function listSavedTournaments() {
+    const library = loadLibrary();
+    return library.tournaments
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+        playerCount: (t.state && t.state.players && t.state.players.length) || 0,
+        currentRound: (t.state && t.state.currentRound) || 0
+      }))
+      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  }
+
+  function getSavedTournament(id) {
+    const library = loadLibrary();
+    return library.tournaments.find((t) => t.id === id) || null;
+  }
+
+  function syncToLibrary(state) {
+    if (!state || !state.tournamentId) return false;
+    const library = loadLibrary();
+    const now = new Date().toISOString();
+    const name = (state.settings && state.settings.name) || 'Chess Tournament';
+    const idx = library.tournaments.findIndex((t) => t.id === state.tournamentId);
+
+    const entry = {
+      id: state.tournamentId,
+      name,
+      createdAt: idx >= 0 ? library.tournaments[idx].createdAt : now,
+      updatedAt: now,
+      state: JSON.parse(JSON.stringify(state))
+    };
+
+    if (idx >= 0) library.tournaments[idx] = entry;
+    else library.tournaments.push(entry);
+
+    return saveLibrary(library);
+  }
+
+  function saveTournamentToLibrary(state, displayName) {
+    if (!state.tournamentId) state.tournamentId = generateTournamentId();
+    if (displayName) state.settings.name = displayName.trim() || state.settings.name;
+    save(state);
+    return syncToLibrary(state);
+  }
+
+  function loadTournamentFromLibrary(id) {
+    const saved = getSavedTournament(id);
+    if (!saved || !saved.state) return null;
+    const state = migrate(mergeDefaults(saved.state));
+    state.tournamentId = saved.id;
+    save(state);
+    return state;
+  }
+
+  function deleteTournamentFromLibrary(id) {
+    const library = loadLibrary();
+    library.tournaments = library.tournaments.filter((t) => t.id !== id);
+    saveLibrary(library);
+    const current = load();
+    if (current.tournamentId === id) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+
+  function createNewTournament(name) {
+    const state = createDefaultState(name);
+    save(state);
+    syncToLibrary(state);
+    return state;
+  }
+
+  /* ---------- Active tournament ---------- */
+
+  function load() {
+    migrateOldStorageToLibrary();
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        const state = createDefaultState();
+        save(state);
+        syncToLibrary(state);
+        return state;
+      }
+      const data = JSON.parse(raw);
+      const state = migrate(mergeDefaults(data));
+      if (!state.tournamentId) {
+        state.tournamentId = generateTournamentId();
+        save(state);
+      }
+      syncToLibrary(state);
+      return state;
     } catch (e) {
       console.error('Failed to load tournament data:', e);
-      return createDefaultState();
+      const state = createDefaultState();
+      save(state);
+      return state;
     }
   }
 
@@ -50,6 +200,7 @@ const Storage = (function () {
   }
 
   function migrate(data) {
+    if (!data.tournamentId) data.tournamentId = generateTournamentId();
     data.players.forEach((p) => {
       if (!p.id) p.id = generateId();
       if (p.points === undefined) p.points = 0;
@@ -67,7 +218,9 @@ const Storage = (function () {
 
   function save(state) {
     try {
+      if (!state.tournamentId) state.tournamentId = generateTournamentId();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      syncToLibrary(state);
       return true;
     } catch (e) {
       console.error('Failed to save tournament data:', e);
@@ -77,10 +230,6 @@ const Storage = (function () {
 
   function clear() {
     localStorage.removeItem(STORAGE_KEY);
-  }
-
-  function generateId() {
-    return 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
   }
 
   function getActivePlayers(state) {
@@ -100,17 +249,43 @@ const Storage = (function () {
     return state.rounds.find((r) => r.number === num);
   }
 
+  function createPlayerFromRow(row) {
+    return {
+      id: generateId(),
+      name: row.name,
+      rating: row.rating || 0,
+      club: row.club || '',
+      active: row.active !== false,
+      points: 0,
+      buchholz: 0,
+      sonneborn: 0,
+      colorBalance: 0,
+      opponents: [],
+      byes: []
+    };
+  }
+
   return {
     STORAGE_KEY,
+    LIBRARY_KEY,
     load,
     save,
     clear,
     generateId,
+    generateTournamentId,
+    createDefaultState,
+    createNewTournament,
+    defaultSettings,
     getActivePlayers,
     getPlayerById,
     getCurrentRoundData,
     getRoundByNumber,
-    createDefaultState,
-    defaultSettings
+    createPlayerFromRow,
+    listSavedTournaments,
+    getSavedTournament,
+    saveTournamentToLibrary,
+    loadTournamentFromLibrary,
+    deleteTournamentFromLibrary,
+    syncToLibrary
   };
 })();

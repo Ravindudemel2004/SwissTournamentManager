@@ -108,6 +108,20 @@
           </div>
         </form>
 
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-header">
+            <h3 class="card-title">Saved Tournaments</h3>
+          </div>
+          <p id="currentTournamentLabel" class="form-hint" style="margin-bottom:1rem"></p>
+          <p class="form-hint" style="margin-bottom:1rem">Tournaments auto-save in your browser. Save, load, or manage multiple events below.</p>
+          <div class="btn-group" style="margin-bottom:1.25rem">
+            <button type="button" class="btn btn-primary" id="btnSaveTournament">Save Current Tournament</button>
+            <button type="button" class="btn btn-secondary" id="btnNewTournament">New Tournament</button>
+            <button type="button" class="btn btn-secondary" id="btnDuplicateTournament">Duplicate as New</button>
+          </div>
+          <div id="savedTournamentsList"></div>
+        </div>
+
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">Import / Export</h3>
@@ -137,5 +151,6 @@
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
   <script src="js/settings.js"></script>
+  <script src="js/tournaments.js"></script>
 </body>
 </html>

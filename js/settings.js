@@ -13,6 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function init() {
     loadForm();
     bindEvents();
+    document.addEventListener('tournament-changed', () => {
+      state = App.getState();
+      loadForm();
+    });
   }
 
   function loadForm() {
@@ -90,6 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     s.tieBreakOrder = tieBreaks.length ? tieBreaks : ['buchholz', 'sonneborn', 'rating'];
 
     App.save();
+    Storage.saveTournamentToLibrary(state);
     showSaveIndicator();
   }
 
@@ -117,13 +122,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const darkMode = state.darkMode;
     const settings = { ...state.settings };
-    App.setState({
-      ...Storage.createDefaultState(),
-      settings,
-      darkMode
-    });
+    const fresh = Storage.createNewTournament(settings.name);
+    fresh.settings = settings;
+    fresh.darkMode = darkMode;
+    App.setState(fresh);
     state = App.getState();
     loadForm();
+    document.dispatchEvent(new CustomEvent('tournament-changed'));
     App.toast('Tournament reset', 'success');
   }
 
@@ -135,8 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
       App.showLoading('Importing...');
       const data = await ExportManager.importJSON(file);
       App.setState(data);
+      Storage.saveTournamentToLibrary(data);
       state = App.getState();
       loadForm();
+      document.dispatchEvent(new CustomEvent('tournament-changed'));
       App.hideLoading();
       App.toast('Tournament imported', 'success');
     } catch (err) {
