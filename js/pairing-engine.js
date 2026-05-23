@@ -1,51 +1,56 @@
 /**
- * Swiss-system pairing engine with score grouping, conflict repair, and backtracking
+ * Swiss-system pairing engine — optimized with cached history & bounded search
  */
 const PairingEngine = (function () {
-  /**
-   * Generate pairings for the next round
-   * @param {Object} state - Full tournament state
-   * @returns {{ pairings: Array, byePlayerId: string|null }}
-   */
-  function generatePairings(state) {
-    const active = Storage.getActivePlayers(state)
-      .map((p) => enrichPlayer(p, state))
-      .sort(compareForPairing);
+  const BACKTRACK_LIMIT = 5000; // prevent UI freeze on large groups
 
-    if (active.length < 2) {
-      return { pairings: [], byePlayerId: active.length === 1 ? active[0].id : null };
-    }
-
-    const scoreGroups = groupByScore(active);
-    const floated = [];
-    let byePlayerId = null;
-
-    for (let gi = 0; gi < scoreGroups.length; gi++) {
-      let group = scoreGroups[gi];
-      if (floated.length) {
-        group = floated.concat(group);
-        floated.length = 0;
-      }
-
-      const result = pairScoreGroup(group, state, gi === scoreGroups.length - 1);
-      floated.push(...result.remainder);
-      if (result.byeId) byePlayerId = result.byeId;
-    }
-
-    if (floated.length === 1 && !byePlayerId) {
-      byePlayerId = assignBye(floated, state);
-      floated.length = 0;
-    } else if (floated.length > 1) {
-      const extra = pairRemaining(floated, state);
-      if (extra.byeId) byePlayerId = extra.byeId;
-    }
-
-    const allPairings = collectPairingsFromRounds(state);
-    return { pairings: allPairings, byePlayerId };
+  function pairKey(idA, idB) {
+    return idA < idB ? `${idA}|${idB}` : `${idB}|${idA}`;
   }
 
-  function enrichPlayer(player, state) {
-    const stats = Standings.getPlayerStats(player.id, state);
+  /** Precompute meeting counts, stats, and colors once per round generation */
+  function buildContext(state) {
+    const maxRematches = state.settings.maxRematches ?? 0;
+    const meetingCount = new Map();
+
+    for (const round of state.rounds) {
+      for (const p of round.pairings || []) {
+        if (!p.black || p.isBye) continue;
+        const key = pairKey(p.white, p.black);
+        meetingCount.set(key, (meetingCount.get(key) || 0) + 1);
+      }
+    }
+
+    const statsCache = new Map();
+    const lastColor = new Map();
+    const active = Storage.getActivePlayers(state);
+
+    for (const p of active) {
+      statsCache.set(p.id, Standings.getPlayerStats(p.id, state));
+      lastColor.set(p.id, computeLastColor(p.id, state));
+    }
+
+    return { state, maxRematches, meetingCount, statsCache, lastColor };
+  }
+
+  function computeLastColor(playerId, state) {
+    for (let r = state.rounds.length - 1; r >= 0; r--) {
+      for (const p of state.rounds[r].pairings || []) {
+        if (p.isBye) continue;
+        if (p.white === playerId) return 'white';
+        if (p.black === playerId) return 'black';
+      }
+    }
+    return null;
+  }
+
+  function hasPlayed(ctx, idA, idB) {
+    const meetings = ctx.meetingCount.get(pairKey(idA, idB)) || 0;
+    return meetings > ctx.maxRematches;
+  }
+
+  function enrichPlayer(player, ctx) {
+    const stats = ctx.statsCache.get(player.id) || { points: 0, colorBalance: 0 };
     return {
       ...player,
       points: stats.points,
@@ -69,223 +74,7 @@ const PairingEngine = (function () {
     return Array.from(map.values()).sort((a, b) => b[0].points - a[0].points);
   }
 
-  /**
-   * Pair a score group using top-half vs bottom-half with repair/backtrack
-   */
-  function pairScoreGroup(group, state, isLastGroup) {
-    const pairings = [];
-    let players = [...group];
-
-    if (players.length % 2 === 1) {
-      const byeId = assignBye(players, state);
-      players = players.filter((p) => p.id !== byeId);
-      if (players.length === 0) {
-        return { pairings: [], remainder: [], byeId };
-      }
-    }
-
-    const attempt = tryPairGroup(players, state, []);
-    if (attempt.success) {
-      return { pairings: attempt.pairings, remainder: [], byeId: null };
-    }
-
-    // Float lowest player to next group if not last
-    if (!isLastGroup && players.length > 0) {
-      const sorted = [...players].sort(compareForPairing);
-      const floated = sorted.pop();
-      const retry = tryPairGroup(sorted, state, []);
-      return {
-        pairings: retry.pairings || [],
-        remainder: retry.success ? [floated] : players,
-        byeId: null
-      };
-    }
-
-    const fallback = pairGreedyWithRepair(players, state);
-    return { pairings: fallback, remainder: [], byeId: null };
-  }
-
-  /**
-   * Top-half vs bottom-half pairing with backtracking on conflicts
-   */
-  function tryPairGroup(players, state, accumulated) {
-    if (players.length === 0) {
-      return { success: true, pairings: accumulated };
-    }
-
-    if (players.length === 1) {
-      return { success: false, pairings: accumulated };
-    }
-
-    const sorted = [...players].sort(compareForPairing);
-    const half = Math.ceil(sorted.length / 2);
-    const top = sorted.slice(0, half);
-    const bottom = sorted.slice(half).reverse();
-
-    const result = pairHalves(top, bottom, state, accumulated, 0);
-    return result;
-  }
-
-  function pairHalves(top, bottom, state, accumulated, topIndex) {
-    if (topIndex >= top.length) {
-      return { success: true, pairings: accumulated };
-    }
-
-    const topPlayer = top[topIndex];
-    const candidates = bottom.filter((b) => !accumulated.some((p) => p.white === b.id || p.black === b.id));
-
-    // Try natural opponent first (same index from bottom)
-    const naturalIdx = top.length - 1 - topIndex;
-    const tryOrder = [];
-
-    if (naturalIdx >= 0 && naturalIdx < bottom.length) {
-      tryOrder.push(bottom[naturalIdx]);
-    }
-    candidates.forEach((c) => {
-      if (!tryOrder.find((t) => t.id === c.id)) tryOrder.push(c);
-    });
-
-    for (const bottomPlayer of tryOrder) {
-      if (!bottomPlayer || accumulated.some((p) => p.white === bottomPlayer.id || p.black === bottomPlayer.id)) {
-        continue;
-      }
-
-      if (alreadyPlayed(topPlayer.id, bottomPlayer.id, state)) {
-        // Conflict repair: try swapping with another bottom player
-        const repaired = repairPairings(top, bottom, topIndex, state, accumulated);
-        if (repaired) return repaired;
-        continue;
-      }
-
-      const colors = assignColors(topPlayer, bottomPlayer, state);
-      const pairing = {
-        white: colors.white,
-        black: colors.black,
-        result: null,
-        board: accumulated.length + 1
-      };
-
-      const newTop = top.filter((_, i) => i !== topIndex);
-      const newBottom = bottom.filter((b) => b.id !== bottomPlayer.id);
-      const newAccum = [...accumulated, pairing];
-
-      const rest = pairHalves(newTop, newBottom, state, newAccum, 0);
-      if (rest.success) return rest;
-
-      // Backtrack: try next candidate
-    }
-
-    // Backtrack: swap within bottom half
-    const repaired = repairPairings(top, bottom, topIndex, state, accumulated);
-    if (repaired) return repaired;
-
-    return { success: false, pairings: accumulated };
-  }
-
-  /**
-   * Attempt to repair conflicts by swapping bottom-half players
-   */
-  function repairPairings(top, bottom, topIndex, state, accumulated) {
-    const topPlayer = top[topIndex];
-    const availableBottom = bottom.filter(
-      (b) => !accumulated.some((p) => p.white === b.id || p.black === b.id)
-    );
-
-    for (let i = 0; i < availableBottom.length; i++) {
-      for (let j = i + 1; j < availableBottom.length; j++) {
-        const swapped = [...bottom];
-        const idxI = swapped.findIndex((b) => b.id === availableBottom[i].id);
-        const idxJ = swapped.findIndex((b) => b.id === availableBottom[j].id);
-        if (idxI < 0 || idxJ < 0) continue;
-
-        [swapped[idxI], swapped[idxJ]] = [swapped[idxJ], swapped[idxI]];
-
-        const result = pairHalves(top, swapped, state, accumulated, topIndex);
-        if (result.success) return result;
-      }
-    }
-
-    // Try pairing top player with any available bottom (full search)
-    for (const bottomPlayer of availableBottom) {
-      if (alreadyPlayed(topPlayer.id, bottomPlayer.id, state)) continue;
-
-      const colors = assignColors(topPlayer, bottomPlayer, state);
-      const pairing = {
-        white: colors.white,
-        black: colors.black,
-        result: null,
-        board: accumulated.length + 1
-      };
-
-      const newTop = top.filter((_, idx) => idx !== topIndex);
-      const newBottom = bottom.filter((b) => b.id !== bottomPlayer.id);
-      const rest = pairHalves(newTop, newBottom, state, [...accumulated, pairing], 0);
-      if (rest.success) return rest;
-    }
-
-    return null;
-  }
-
-  function pairGreedyWithRepair(players, state) {
-    const sorted = [...players].sort(compareForPairing);
-    const pairings = [];
-    const used = new Set();
-
-    for (let i = 0; i < sorted.length; i++) {
-      if (used.has(sorted[i].id)) continue;
-      let paired = false;
-
-      for (let j = sorted.length - 1; j > i; j--) {
-        if (used.has(sorted[j].id)) continue;
-        if (alreadyPlayed(sorted[i].id, sorted[j].id, state)) continue;
-
-        const colors = assignColors(sorted[i], sorted[j], state);
-        pairings.push({
-          white: colors.white,
-          black: colors.black,
-          result: null,
-          board: pairings.length + 1
-        });
-        used.add(sorted[i].id);
-        used.add(sorted[j].id);
-        paired = true;
-        break;
-      }
-
-      if (!paired && !used.has(sorted[i].id)) {
-        for (let j = i + 1; j < sorted.length; j++) {
-          if (used.has(sorted[j].id)) continue;
-          const colors = assignColors(sorted[i], sorted[j], state);
-          pairings.push({
-            white: colors.white,
-            black: colors.black,
-            result: null,
-            board: pairings.length + 1
-          });
-          used.add(sorted[i].id);
-          used.add(sorted[j].id);
-          break;
-        }
-      }
-    }
-
-    return pairings;
-  }
-
-  function pairRemaining(players, state) {
-    const result = tryPairGroup(players, state, []);
-    if (result.success) {
-      return { pairings: result.pairings, byeId: null };
-    }
-    const byeId = players.length % 2 === 1 ? assignBye(players, state) : null;
-    const filtered = byeId ? players.filter((p) => p.id !== byeId) : players;
-    return { pairings: pairGreedyWithRepair(filtered, state), byeId };
-  }
-
-  /**
-   * Assign bye to player with lowest score/rating who has fewest byes
-   */
-  function assignBye(players, state) {
+  function assignBye(players) {
     if (!players.length) return null;
     const sorted = [...players].sort((a, b) => {
       if (a.points !== b.points) return a.points - b.points;
@@ -295,13 +84,10 @@ const PairingEngine = (function () {
     return sorted[0].id;
   }
 
-  /**
-   * Assign colors based on balance and settings
-   */
-  function assignColors(playerA, playerB, state) {
-    const priority = state.settings.colorPriority || 'balance';
-    const statsA = Standings.getPlayerStats(playerA.id, state);
-    const statsB = Standings.getPlayerStats(playerB.id, state);
+  function assignColors(playerA, playerB, ctx) {
+    const priority = ctx.state.settings.colorPriority || 'balance';
+    const statsA = ctx.statsCache.get(playerA.id) || { colorBalance: 0 };
+    const statsB = ctx.statsCache.get(playerB.id) || { colorBalance: 0 };
 
     let whiteId, blackId;
 
@@ -311,29 +97,22 @@ const PairingEngine = (function () {
     } else if (priority === 'black') {
       blackId = (playerA.rating || 0) >= (playerB.rating || 0) ? playerA.id : playerB.id;
       whiteId = blackId === playerA.id ? playerB.id : playerA.id;
+    } else if (statsA.colorBalance < statsB.colorBalance) {
+      whiteId = playerA.id;
+      blackId = playerB.id;
+    } else if (statsB.colorBalance < statsA.colorBalance) {
+      whiteId = playerB.id;
+      blackId = playerA.id;
+    } else if ((playerA.rating || 0) <= (playerB.rating || 0)) {
+      whiteId = playerA.id;
+      blackId = playerB.id;
     } else {
-      // Balance: give white to player who needs white (lower color balance)
-      if (statsA.colorBalance < statsB.colorBalance) {
-        whiteId = playerA.id;
-        blackId = playerB.id;
-      } else if (statsB.colorBalance < statsA.colorBalance) {
-        whiteId = playerB.id;
-        blackId = playerA.id;
-      } else {
-        // Alternate by rating — lower rated gets white in equal balance
-        if ((playerA.rating || 0) <= (playerB.rating || 0)) {
-          whiteId = playerA.id;
-          blackId = playerB.id;
-        } else {
-          whiteId = playerB.id;
-          blackId = playerA.id;
-        }
-      }
+      whiteId = playerB.id;
+      blackId = playerA.id;
     }
 
-    // Prevent repeated color if possible
-    const lastA = getLastColor(playerA.id, state);
-    const lastB = getLastColor(playerB.id, state);
+    const lastA = ctx.lastColor.get(playerA.id);
+    const lastB = ctx.lastColor.get(playerB.id);
 
     if (lastA === 'white' && lastB !== 'white' && statsA.colorBalance >= statsB.colorBalance) {
       whiteId = playerB.id;
@@ -346,40 +125,113 @@ const PairingEngine = (function () {
     return { white: whiteId, black: blackId };
   }
 
-  function getLastColor(playerId, state) {
-    for (let r = state.rounds.length - 1; r >= 0; r--) {
-      const round = state.rounds[r];
-      for (const p of round.pairings || []) {
-        if (p.isBye) continue;
-        if (p.white === playerId) return 'white';
-        if (p.black === playerId) return 'black';
-      }
+  /**
+   * Fast top-vs-bottom pairing with bounded backtracking
+   */
+  function pairGroup(group, ctx, boardOffset) {
+    if (group.length === 0) return { pairings: [], remainder: [] };
+    if (group.length === 1) return { pairings: [], remainder: group };
+
+    const sorted = [...group].sort(compareForPairing);
+    const half = Math.floor(sorted.length / 2);
+    const top = sorted.slice(0, half);
+    const bottom = sorted.slice(half);
+
+    let steps = 0;
+    const result = matchTopBottom(top, bottom, ctx, boardOffset, [], () => ++steps > BACKTRACK_LIMIT);
+
+    if (result.success) {
+      return { pairings: result.pairings, remainder: [] };
     }
-    return null;
+
+    return { pairings: pairGreedy(sorted, ctx, boardOffset), remainder: [] };
   }
 
-  /**
-   * Check if two players have already met
-   */
-  function alreadyPlayed(idA, idB, state) {
-    const maxRematches = state.settings.maxRematches ?? 0;
+  function matchTopBottom(top, bottom, ctx, boardOffset, accumulated, shouldAbort) {
+    if (shouldAbort()) return { success: false, pairings: accumulated };
+    if (top.length === 0) return { success: true, pairings: accumulated };
 
-    let meetings = 0;
-    for (const round of state.rounds) {
-      for (const p of round.pairings || []) {
-        if (
-          (p.white === idA && p.black === idB) ||
-          (p.white === idB && p.black === idA)
-        ) {
-          meetings++;
+    const topPlayer = top[0];
+
+    // Prefer natural Swiss opponent (1st vs last in bottom half)
+    const tryOrder = [...bottom];
+    if (tryOrder.length > 1) {
+      const natural = tryOrder.pop();
+      tryOrder.unshift(natural);
+    }
+
+    for (let i = 0; i < tryOrder.length; i++) {
+      const bottomPlayer = tryOrder[i];
+      if (hasPlayed(ctx, topPlayer.id, bottomPlayer.id)) continue;
+
+      const colors = assignColors(topPlayer, bottomPlayer, ctx);
+      const pairing = {
+        white: colors.white,
+        black: colors.black,
+        result: null,
+        board: boardOffset + accumulated.length + 1
+      };
+
+      const result = matchTopBottom(
+        top.slice(1),
+        tryOrder.filter((_, idx) => idx !== i),
+        ctx,
+        boardOffset,
+        [...accumulated, pairing],
+        shouldAbort
+      );
+      if (result.success) return result;
+    }
+
+    return { success: false, pairings: accumulated };
+  }
+
+  /** Greedy fallback — fast for large score groups */
+  function pairGreedy(players, ctx, boardOffset) {
+    const sorted = [...players].sort(compareForPairing);
+    const pairings = [];
+    const used = new Set();
+
+    for (let i = 0; i < sorted.length; i++) {
+      if (used.has(sorted[i].id)) continue;
+      let matched = false;
+
+      for (let j = sorted.length - 1; j > i; j--) {
+        if (used.has(sorted[j].id)) continue;
+        if (hasPlayed(ctx, sorted[i].id, sorted[j].id)) continue;
+
+        const colors = assignColors(sorted[i], sorted[j], ctx);
+        pairings.push({
+          white: colors.white,
+          black: colors.black,
+          result: null,
+          board: boardOffset + pairings.length + 1
+        });
+        used.add(sorted[i].id);
+        used.add(sorted[j].id);
+        matched = true;
+        break;
+      }
+
+      if (!matched) {
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (used.has(sorted[j].id)) continue;
+          if (hasPlayed(ctx, sorted[i].id, sorted[j].id)) continue;
+          const colors = assignColors(sorted[i], sorted[j], ctx);
+          pairings.push({
+            white: colors.white,
+            black: colors.black,
+            result: null,
+            board: boardOffset + pairings.length + 1
+          });
+          used.add(sorted[i].id);
+          used.add(sorted[j].id);
+          break;
         }
       }
     }
-    return meetings > maxRematches;
-  }
 
-  function collectPairingsFromRounds(state) {
-    return [];
+    return pairings;
   }
 
   /**
@@ -391,7 +243,8 @@ const PairingEngine = (function () {
       throw new Error('Need at least 2 active players to generate pairings');
     }
 
-    const enriched = active.map((p) => enrichPlayer(p, state)).sort(compareForPairing);
+    const ctx = buildContext(state);
+    const enriched = active.map((p) => enrichPlayer(p, ctx)).sort(compareForPairing);
     const scoreGroups = groupByScore(enriched);
     const allPairings = [];
     let byePlayerId = null;
@@ -402,32 +255,28 @@ const PairingEngine = (function () {
       floatedDown.length = 0;
 
       if (group.length % 2 === 1) {
-        byePlayerId = assignBye(group, state);
-        const byePlayer = group.find((p) => p.id === byePlayerId);
+        byePlayerId = assignBye(group);
         group = group.filter((p) => p.id !== byePlayerId);
-
-        if (byePlayer) {
-          allPairings.push({
-            white: byePlayerId,
-            black: null,
-            result: 'bye',
-            board: allPairings.length + 1,
-            isBye: true
-          });
-        }
+        allPairings.push({
+          white: byePlayerId,
+          black: null,
+          result: 'bye',
+          board: allPairings.length + 1,
+          isBye: true
+        });
       }
 
-      const paired = pairGroupIntoMatches(group, state, allPairings.length);
+      const paired = pairGroup(group, ctx, allPairings.length);
+
       if (paired.remainder.length > 0 && g < scoreGroups.length - 1) {
         floatedDown.push(...paired.remainder);
       } else if (paired.remainder.length > 0) {
-        const extra = pairGroupIntoMatches(paired.remainder, state, allPairings.length);
+        const extra = pairGroup(paired.remainder, ctx, allPairings.length);
         allPairings.push(...extra.pairings);
       }
       allPairings.push(...paired.pairings);
     }
 
-    // Re-number boards
     allPairings.forEach((p, i) => {
       p.board = i + 1;
     });
@@ -435,81 +284,27 @@ const PairingEngine = (function () {
     return { pairings: allPairings, byePlayerId };
   }
 
-  function pairGroupIntoMatches(group, state, boardOffset) {
-    if (group.length === 0) return { pairings: [], remainder: [] };
-    if (group.length === 1) return { pairings: [], remainder: group };
-
-    const sorted = [...group].sort(compareForPairing);
-    const half = Math.floor(sorted.length / 2);
-    const top = sorted.slice(0, half);
-    const bottom = sorted.slice(half);
-
-    const attempt = matchTopBottom(top, bottom, state, boardOffset, []);
-    if (attempt.success) {
-      return { pairings: attempt.pairings, remainder: [] };
-    }
-
-    const repaired = repairPairings(top, bottom, 0, state, []);
-    if (repaired && repaired.success) {
-      repaired.pairings.forEach((p, i) => {
-        p.board = boardOffset + i + 1;
-      });
-      return { pairings: repaired.pairings, remainder: [] };
-    }
-
-    const greedy = pairGreedyWithRepair(sorted, state);
-    greedy.forEach((p, i) => {
-      p.board = boardOffset + i + 1;
-    });
-    const pairedIds = new Set();
-    greedy.forEach((p) => {
-      pairedIds.add(p.white);
-      pairedIds.add(p.black);
-    });
-    const remainder = sorted.filter((p) => !pairedIds.has(p.id));
-
-    return { pairings: greedy, remainder };
+  // Legacy API compatibility
+  function alreadyPlayed(idA, idB, state) {
+    const ctx = buildContext(state);
+    return hasPlayed(ctx, idA, idB);
   }
 
-  function matchTopBottom(top, bottom, state, boardOffset, accumulated) {
-    if (top.length === 0) {
-      return { success: true, pairings: accumulated };
-    }
+  function generatePairings(state) {
+    return buildRoundPairings(state);
+  }
 
-    const topPlayer = top[0];
-    const remainingBottom = [...bottom];
-
-    for (let i = 0; i < remainingBottom.length; i++) {
-      const bottomPlayer = remainingBottom[i];
-
-      if (alreadyPlayed(topPlayer.id, bottomPlayer.id, state)) {
-        continue;
-      }
-
-      const colors = assignColors(topPlayer, bottomPlayer, state);
-      const pairing = {
-        white: colors.white,
-        black: colors.black,
-        result: null,
-        board: boardOffset + accumulated.length + 1
-      };
-
-      const newTop = top.slice(1);
-      const newBottom = remainingBottom.filter((_, idx) => idx !== i);
-
-      const result = matchTopBottom(newTop, newBottom, state, boardOffset, [...accumulated, pairing]);
-      if (result.success) return result;
-    }
-
-    return { success: false, pairings: accumulated };
+  function assignByeForState(players, state) {
+    const ctx = buildContext(state);
+    return assignBye(players.map((p) => enrichPlayer(p, ctx)));
   }
 
   return {
     generatePairings,
     buildRoundPairings,
     alreadyPlayed,
-    assignBye,
-    assignColors,
-    repairPairings
+    assignBye: assignByeForState,
+    assignColors: (a, b, state) => assignColors(a, b, buildContext(state)),
+    repairPairings: () => null
   };
 })();

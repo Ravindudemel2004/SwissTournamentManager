@@ -216,6 +216,9 @@ const App = (function () {
     showLoading('Generating pairings...');
 
     try {
+      // Let the loading overlay paint before heavy pairing work
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       Standings.calculateStandings(state);
       const { pairings, byePlayerId } = PairingEngine.buildRoundPairings(state);
 
