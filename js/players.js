@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let sortField = 'name';
   let sortAsc = true;
   let searchQuery = '';
+  let pendingExcelImport = null;
 
   const tbody = document.getElementById('playersTableBody');
   const searchInput = document.getElementById('playerSearch');
@@ -264,8 +265,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     e.target.value = '';
   }
-
-  let pendingExcelImport = null;
 
   async function handleExcelSelect(e) {
     const file = e.target.files[0];
