@@ -68,6 +68,15 @@ document.addEventListener('DOMContentLoaded', () => {
         App.toast(e.message, 'error');
       }
     });
+    document.getElementById('btnExportAllResults')?.addEventListener('click', () => {
+      try {
+        state = App.getState();
+        ExportManager.exportAllResultsCSV(state);
+        App.toast('All results exported', 'success');
+      } catch (e) {
+        App.toast(e.message, 'error');
+      }
+    });
   }
 
   function autoSave() {
