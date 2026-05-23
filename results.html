@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pairings | Swiss Tournament Manager</title>
+  <title>Results | Swiss Tournament Manager</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -19,8 +19,8 @@
       <nav class="nav-links">
         <a href="index.html"><span class="nav-icon">📊</span> Dashboard</a>
         <a href="players.html"><span class="nav-icon">👥</span> Players</a>
-        <a href="pairings.html" class="active"><span class="nav-icon">📋</span> Pairings</a>
-        <a href="results.html"><span class="nav-icon">✓</span> Results</a>
+        <a href="pairings.html"><span class="nav-icon">📋</span> Pairings</a>
+        <a href="results.html" class="active"><span class="nav-icon">✓</span> Results</a>
         <a href="standings.html"><span class="nav-icon">🏆</span> Standings</a>
         <a href="settings.html"><span class="nav-icon">⚙️</span> Settings</a>
       </nav>
@@ -31,7 +31,7 @@
       <header class="topbar">
         <div class="topbar-left">
           <button class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
-          <h2 class="page-title" id="pageTitle">Pairings</h2>
+          <h2 class="page-title" id="pageTitle">Results</h2>
         </div>
         <div class="topbar-right">
           <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
@@ -41,17 +41,18 @@
       <div class="content-area">
         <div class="toolbar">
           <div class="btn-group">
-            <button class="btn btn-success" id="btnGenerateRound">Generate Next Round</button>
-            <button class="btn btn-secondary" id="btnLockRound">Lock Round</button>
-            <button class="btn btn-secondary" id="btnExportPairings">Export CSV</button>
+            <button class="btn btn-secondary" id="btnViewRound">By Round</button>
+            <button class="btn btn-secondary" id="btnViewMatrix">Results Grid</button>
+            <button class="btn btn-secondary" id="btnExportResults">Export CSV</button>
           </div>
+          <a href="pairings.html" class="btn btn-primary btn-sm">Enter on Pairings →</a>
         </div>
 
         <div class="round-tabs" id="roundTabs"></div>
         <div id="roundInfo"></div>
 
-        <div class="card">
-          <div id="pairingsContent"></div>
+        <div class="card" id="resultsCard">
+          <div id="resultsContent"></div>
         </div>
       </div>
     </main>
@@ -62,6 +63,6 @@
   <script src="js/pairing-engine.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
-  <script src="js/pairings.js"></script>
+  <script src="js/results.js"></script>
 </body>
 </html>

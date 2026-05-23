@@ -99,10 +99,93 @@ const ExportManager = (function () {
     URL.revokeObjectURL(url);
   }
 
+  function exportResultsCSV(state, roundNumber) {
+    const round = Storage.getRoundByNumber(state, roundNumber || state.currentRound);
+    if (!round) throw new Error('No round to export');
+
+    const headers = ['Round', 'Board', 'White', 'Black', 'Result', 'White Pts', 'Black Pts'];
+    const rows = (round.pairings || []).map((p) => {
+      const white = Storage.getPlayerById(state, p.white);
+      const black = p.black ? Storage.getPlayerById(state, p.black) : null;
+      const wPts = getResultPoints(state, p.white, p);
+      const bPts = p.black ? getResultPoints(state, p.black, p) : '';
+      return [
+        round.number,
+        p.board,
+        escapeCSV(white ? white.name : ''),
+        escapeCSV(black ? black.name : 'BYE'),
+        p.isBye ? 'bye' : p.result || 'pending',
+        wPts !== null ? wPts : '',
+        bPts !== null && bPts !== '' ? bPts : ''
+      ];
+    });
+
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadFile(csv, getFileName(state, `round${round.number}_results.csv`), 'text/csv');
+  }
+
+  function exportAllResultsCSV(state) {
+    if (!state.rounds.length) throw new Error('No results to export');
+
+    const roundNums = state.rounds.map((r) => r.number);
+    const headers = ['Player', 'Rating', ...roundNums.map((n) => `R${n}`), 'Total Points'];
+    const players = state.players.filter((p) => p.active);
+
+    const rows = players.map((player) => {
+      const stats = Standings.getPlayerStats(player.id, state);
+      const roundCells = state.rounds.map((round) => {
+        const cell = getMatrixCell(state, player.id, round);
+        return escapeCSV(cell);
+      });
+      return [
+        escapeCSV(player.name),
+        player.rating || 0,
+        ...roundCells,
+        stats.points
+      ];
+    });
+
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadFile(csv, getFileName(state, 'all_results.csv'), 'text/csv');
+  }
+
+  function getResultPoints(state, playerId, pairing) {
+    const scores = {
+      win: state.settings.scoreWin ?? 1,
+      draw: state.settings.scoreDraw ?? 0.5,
+      loss: state.settings.scoreLoss ?? 0
+    };
+    if (pairing.isBye && pairing.white === playerId) return scores.win;
+    const isWhite = pairing.white === playerId;
+    const isBlack = pairing.black === playerId;
+    if (!isWhite && !isBlack) return null;
+    const r = pairing.result;
+    if (!r || r === 'pending') return null;
+    if (r === '1-0') return isWhite ? scores.win : scores.loss;
+    if (r === '0-1') return isBlack ? scores.win : scores.loss;
+    if (r === '0.5-0.5') return scores.draw;
+    return null;
+  }
+
+  function getMatrixCell(state, playerId, round) {
+    for (const p of round.pairings || []) {
+      if (p.isBye && p.white === playerId) return 'BYE';
+      if (p.white !== playerId && p.black !== playerId) continue;
+      if (!p.result || p.result === 'pending') return '';
+      const isWhite = p.white === playerId;
+      if (p.result === '0.5-0.5') return 'D';
+      if (p.result === '1-0') return isWhite ? 'W' : 'L';
+      if (p.result === '0-1') return isWhite ? 'L' : 'W';
+    }
+    return '';
+  }
+
   return {
     exportJSON,
     importJSON,
     exportStandingsCSV,
-    exportPairingsCSV
+    exportPairingsCSV,
+    exportResultsCSV,
+    exportAllResultsCSV
   };
 })();
