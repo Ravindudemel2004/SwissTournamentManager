@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Players | Swiss Tournament Manager</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <div class="logo-icon">♞</div>
+          <div><h1>Swiss Manager</h1><span>Chess Tournaments</span></div>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a href="index.html"><span class="nav-icon">📊</span> Dashboard</a>
+        <a href="players.html" class="active"><span class="nav-icon">👥</span> Players</a>
+        <a href="pairings.html"><span class="nav-icon">📋</span> Pairings</a>
+        <a href="standings.html"><span class="nav-icon">🏆</span> Standings</a>
+        <a href="settings.html"><span class="nav-icon">⚙️</span> Settings</a>
+      </nav>
+      <div class="sidebar-footer"><small style="color:var(--text-muted)">v1.0</small></div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+          <h2 class="page-title" id="pageTitle">Players</h2>
+        </div>
+        <div class="topbar-right">
+          <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="toolbar">
+          <div>
+            <p id="playerCount" style="color:var(--text-muted);font-size:0.9rem">0 players</p>
+          </div>
+          <div class="search-bar">
+            <input type="text" class="form-control" id="playerSearch" placeholder="Search players...">
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btnAddPlayer">+ Add Player</button>
+            <button class="btn btn-secondary" id="btnExportJson">Export JSON</button>
+            <button class="btn btn-secondary" id="btnImportJson">Import JSON</button>
+            <input type="file" id="importJsonInput" class="file-input-hidden" accept=".json">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th data-sort="name" style="cursor:pointer">Name ↕</th>
+                  <th data-sort="rating" style="cursor:pointer">Rating ↕</th>
+                  <th class="hide-mobile">Club</th>
+                  <th data-sort="points" style="cursor:pointer">Pts ↕</th>
+                  <th class="hide-mobile">BH</th>
+                  <th>Status</th>
+                  <th class="hide-mobile">Colors</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="playersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Player Modal -->
+  <div class="modal-overlay" id="playerModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="playerModalTitle">Add Player</h2>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="playerForm">
+          <input type="hidden" id="playerId">
+          <div class="form-group">
+            <label for="playerName">Name *</label>
+            <input type="text" class="form-control" id="playerName" required maxlength="80">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="playerRating">Rating</label>
+              <input type="number" class="form-control" id="playerRating" min="0" max="3000" value="1200">
+            </div>
+            <div class="form-group">
+              <label for="playerClub">Club / Team</label>
+              <input type="text" class="form-control" id="playerClub" maxlength="60">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="playerActive" checked> Active for pairing
+            </label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close>Cancel</button>
+        <button class="btn btn-primary" id="btnSavePlayer">Save Player</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/standings.js"></script>
+  <script src="js/pairing-engine.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/players.js"></script>
+</body>
+</html>

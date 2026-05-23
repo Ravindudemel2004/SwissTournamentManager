@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Swiss Tournament Manager - Professional chess tournament management">
+  <title>Dashboard | Swiss Tournament Manager</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <div class="logo-icon">♞</div>
+          <div>
+            <h1>Swiss Manager</h1>
+            <span>Chess Tournaments</span>
+          </div>
+        </div>
+      </div>
+      <nav class="nav-links">
+        <a href="index.html" class="active"><span class="nav-icon">📊</span> Dashboard</a>
+        <a href="players.html"><span class="nav-icon">👥</span> Players</a>
+        <a href="pairings.html"><span class="nav-icon">📋</span> Pairings</a>
+        <a href="standings.html"><span class="nav-icon">🏆</span> Standings</a>
+        <a href="settings.html"><span class="nav-icon">⚙️</span> Settings</a>
+      </nav>
+      <div class="sidebar-footer">
+        <small style="color:var(--text-muted)">v1.0 · GitHub Pages</small>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+          <h2 class="page-title" id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="topbar-right">
+          <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="card" style="margin-bottom:1.5rem;border:none;background:transparent;box-shadow:none;padding:0">
+          <h2 id="tournamentName" style="font-size:1.75rem;font-weight:700">Chess Tournament</h2>
+          <p style="color:var(--text-muted);margin-top:0.25rem">Swiss-system tournament control panel</p>
+        </div>
+
+        <div id="roundStatus"></div>
+
+        <div class="stats-grid">
+          <div class="stat-card accent">
+            <div class="stat-label">Current Round</div>
+            <div class="stat-value" id="statCurrentRound">—</div>
+            <div class="stat-sub">of <span id="statTotalRounds">5</span> rounds</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Players</div>
+            <div class="stat-value" id="statTotalPlayers">0</div>
+            <div class="stat-sub"><span id="statActivePlayers">0</span> active</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Round Progress</div>
+            <div class="stat-value" id="statRoundProgress">—</div>
+            <div class="progress-bar"><div class="progress-fill" id="roundProgressBar" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <div class="toolbar" style="margin-bottom:1.5rem">
+          <div class="btn-group">
+            <a href="pairings.html" class="btn btn-primary">View Pairings</a>
+            <button class="btn btn-success" id="btnGenerateRound">Generate Next Round</button>
+          </div>
+          <a href="players.html" class="btn btn-secondary">Manage Players</a>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Top Standings</h3>
+              <a href="standings.html" class="btn btn-sm btn-secondary">View All</a>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Player</th>
+                    <th>Rating</th>
+                    <th>Pts</th>
+                    <th class="hide-mobile">BH</th>
+                  </tr>
+                </thead>
+                <tbody id="standingsPreview"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Quick Actions</h3>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.75rem">
+              <a href="players.html" class="btn btn-secondary" style="justify-content:flex-start">➕ Add Players</a>
+              <a href="pairings.html" class="btn btn-secondary" style="justify-content:flex-start">📋 Enter Results</a>
+              <a href="settings.html" class="btn btn-secondary" style="justify-content:flex-start">⚙️ Tournament Settings</a>
+              <a href="standings.html" class="btn btn-secondary" style="justify-content:flex-start">🏆 Live Standings</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/standings.js"></script>
+  <script src="js/pairing-engine.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      App.renderLayout('Dashboard');
+      App.renderDashboard();
+      document.getElementById('btnGenerateRound')?.addEventListener('click', async () => {
+        const ok = await App.generateNextRound();
+        if (ok) App.renderDashboard();
+      });
+    });
+  </script>
+</body>
+</html>
