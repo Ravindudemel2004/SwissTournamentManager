@@ -10,21 +10,39 @@ const Standings = (function () {
     };
   }
 
-  function parseResult(result, playerId, pairing) {
-    const scores = { win: 1, draw: 0.5, loss: 0 };
-    if (result === 'bye') {
-      return scores.win;
+  /** Points only — safe to call while computing Buchholz (no circular stats) */
+  function computePointsOnly(playerId, state) {
+    const scores = getScoreValues(state);
+    let points = 0;
+
+    for (const round of state.rounds) {
+      for (const pairing of round.pairings || []) {
+        const isWhite = pairing.white === playerId;
+        const isBlack = pairing.black === playerId;
+        const isBye = pairing.isBye && pairing.white === playerId;
+
+        if (!isWhite && !isBlack && !isBye) continue;
+
+        if (isBye || (pairing.isBye && pairing.white === playerId)) {
+          if (pairing.result === 'bye' || pairing.result === '1-0') {
+            points += scores.win;
+          }
+          continue;
+        }
+
+        if (pairing.result === null || pairing.result === 'pending') continue;
+
+        if (pairing.result === '1-0') {
+          points += isWhite ? scores.win : scores.loss;
+        } else if (pairing.result === '0-1') {
+          points += isBlack ? scores.win : scores.loss;
+        } else if (pairing.result === '0.5-0.5' || pairing.result === '1/2-1/2') {
+          points += scores.draw;
+        }
+      }
     }
-    if (!result || result === 'pending') return null;
 
-    const isWhite = pairing.white === playerId;
-    const isBlack = pairing.black === playerId;
-
-    if (result === '1-0') return isWhite ? scores.win : scores.loss;
-    if (result === '0-1') return isBlack ? scores.win : scores.loss;
-    if (result === '0.5-0.5' || result === '1/2-1/2') return scores.draw;
-
-    return null;
+    return points;
   }
 
   function getPlayerStats(playerId, state) {
@@ -36,10 +54,6 @@ const Standings = (function () {
     const gameResults = [];
 
     for (const round of state.rounds) {
-      if (round.locked === false && round.number === state.currentRound) {
-        // Include current round if results entered
-      }
-
       for (const pairing of round.pairings || []) {
         const isWhite = pairing.white === playerId;
         const isBlack = pairing.black === playerId;
@@ -75,17 +89,21 @@ const Standings = (function () {
 
         if (playerScore !== null) {
           points += playerScore;
-          gameResults.push({ opponentId: oppId, score: playerScore, oppScore: getOpponentScore(playerScore, scores) });
+          gameResults.push({ opponentId: oppId, score: playerScore });
         }
       }
     }
 
-    const opponentPoints = opponentIds.map((oid) => getPointsForPlayer(oid, state));
-    const buchholz = opponentPoints.reduce((sum, p) => sum + p, 0);
+    // Use points-only for opponents — avoids infinite recursion in Buchholz / S-B
+    const uniqueOpponents = [...new Set(opponentIds)];
+    const buchholz = uniqueOpponents.reduce(
+      (sum, oid) => sum + computePointsOnly(oid, state),
+      0
+    );
 
     let sonneborn = 0;
     gameResults.forEach((g) => {
-      const oppPts = getPointsForPlayer(g.opponentId, state);
+      const oppPts = computePointsOnly(g.opponentId, state);
       if (g.score >= scores.win) {
         sonneborn += oppPts;
       } else if (g.score >= scores.draw) {
@@ -99,18 +117,12 @@ const Standings = (function () {
       colorBalance,
       buchholz,
       sonneborn,
-      opponents: [...new Set(opponentIds)]
+      opponents: uniqueOpponents
     };
   }
 
-  function getOpponentScore(playerScore, scores) {
-    if (playerScore >= scores.win) return scores.loss;
-    if (playerScore <= scores.loss) return scores.win;
-    return scores.draw;
-  }
-
   function getPointsForPlayer(playerId, state) {
-    return getPlayerStats(playerId, state).points;
+    return computePointsOnly(playerId, state);
   }
 
   function calculateStandings(state) {
@@ -136,7 +148,6 @@ const Standings = (function () {
       p.rank = index + 1;
     });
 
-    // Sync back to state players
     standings.forEach((s) => {
       const p = state.players.find((pl) => pl.id === s.id);
       if (p) {
@@ -172,7 +183,9 @@ const Standings = (function () {
   }
 
   function getRoundProgress(round) {
-    if (!round || !round.pairings || round.pairings.length === 0) return { completed: 0, total: 0, percent: 0 };
+    if (!round || !round.pairings || round.pairings.length === 0) {
+      return { completed: 0, total: 0, percent: 0 };
+    }
     const total = round.pairings.length;
     const completed = round.pairings.filter((p) => {
       if (p.isBye) return true;
@@ -194,6 +207,7 @@ const Standings = (function () {
     isRoundComplete,
     getRoundProgress,
     canAdvanceRound,
-    getPointsForPlayer
+    getPointsForPlayer,
+    computePointsOnly
   };
 })();

@@ -1,14 +1,11 @@
 /**
- * Swiss-system pairing engine — optimized with cached history & bounded search
+ * Swiss-system pairing engine — iterative pairing, cached history
  */
 const PairingEngine = (function () {
-  const BACKTRACK_LIMIT = 5000; // prevent UI freeze on large groups
-
   function pairKey(idA, idB) {
     return idA < idB ? `${idA}|${idB}` : `${idB}|${idA}`;
   }
 
-  /** Precompute meeting counts, stats, and colors once per round generation */
   function buildContext(state) {
     const maxRematches = state.settings.maxRematches ?? 0;
     const meetingCount = new Map();
@@ -126,67 +123,62 @@ const PairingEngine = (function () {
   }
 
   /**
-   * Fast top-vs-bottom pairing with bounded backtracking
+   * Swiss top-vs-bottom pairing (iterative — no recursion)
    */
-  function pairGroup(group, ctx, boardOffset) {
-    if (group.length === 0) return { pairings: [], remainder: [] };
-    if (group.length === 1) return { pairings: [], remainder: group };
+  function pairGroupSwiss(group, ctx, boardOffset) {
+    if (group.length === 0) return [];
+    if (group.length === 1) return [];
 
     const sorted = [...group].sort(compareForPairing);
     const half = Math.floor(sorted.length / 2);
     const top = sorted.slice(0, half);
     const bottom = sorted.slice(half);
+    const available = new Set(bottom.map((p) => p.id));
+    const pairings = [];
 
-    let steps = 0;
-    const result = matchTopBottom(top, bottom, ctx, boardOffset, [], () => ++steps > BACKTRACK_LIMIT);
+    for (const topPlayer of top) {
+      const bottomList = bottom.filter((p) => available.has(p.id));
+      let paired = false;
 
-    if (result.success) {
-      return { pairings: result.pairings, remainder: [] };
+      // Natural Swiss: top vs bottom of bottom half first
+      const tryOrder = [...bottomList].reverse();
+
+      for (const bottomPlayer of tryOrder) {
+        if (!available.has(bottomPlayer.id)) continue;
+        if (hasPlayed(ctx, topPlayer.id, bottomPlayer.id)) continue;
+
+        const colors = assignColors(topPlayer, bottomPlayer, ctx);
+        pairings.push({
+          white: colors.white,
+          black: colors.black,
+          result: null,
+          board: boardOffset + pairings.length + 1
+        });
+        available.delete(bottomPlayer.id);
+        paired = true;
+        break;
+      }
+
+      if (!paired) {
+        for (const bottomPlayer of bottomList) {
+          if (!available.has(bottomPlayer.id)) continue;
+          const colors = assignColors(topPlayer, bottomPlayer, ctx);
+          pairings.push({
+            white: colors.white,
+            black: colors.black,
+            result: null,
+            board: boardOffset + pairings.length + 1
+          });
+          available.delete(bottomPlayer.id);
+          paired = true;
+          break;
+        }
+      }
     }
 
-    return { pairings: pairGreedy(sorted, ctx, boardOffset), remainder: [] };
+    return pairings;
   }
 
-  function matchTopBottom(top, bottom, ctx, boardOffset, accumulated, shouldAbort) {
-    if (shouldAbort()) return { success: false, pairings: accumulated };
-    if (top.length === 0) return { success: true, pairings: accumulated };
-
-    const topPlayer = top[0];
-
-    // Prefer natural Swiss opponent (1st vs last in bottom half)
-    const tryOrder = [...bottom];
-    if (tryOrder.length > 1) {
-      const natural = tryOrder.pop();
-      tryOrder.unshift(natural);
-    }
-
-    for (let i = 0; i < tryOrder.length; i++) {
-      const bottomPlayer = tryOrder[i];
-      if (hasPlayed(ctx, topPlayer.id, bottomPlayer.id)) continue;
-
-      const colors = assignColors(topPlayer, bottomPlayer, ctx);
-      const pairing = {
-        white: colors.white,
-        black: colors.black,
-        result: null,
-        board: boardOffset + accumulated.length + 1
-      };
-
-      const result = matchTopBottom(
-        top.slice(1),
-        tryOrder.filter((_, idx) => idx !== i),
-        ctx,
-        boardOffset,
-        [...accumulated, pairing],
-        shouldAbort
-      );
-      if (result.success) return result;
-    }
-
-    return { success: false, pairings: accumulated };
-  }
-
-  /** Greedy fallback — fast for large score groups */
   function pairGreedy(players, ctx, boardOffset) {
     const sorted = [...players].sort(compareForPairing);
     const pairings = [];
@@ -216,7 +208,6 @@ const PairingEngine = (function () {
       if (!matched) {
         for (let j = i + 1; j < sorted.length; j++) {
           if (used.has(sorted[j].id)) continue;
-          if (hasPlayed(ctx, sorted[i].id, sorted[j].id)) continue;
           const colors = assignColors(sorted[i], sorted[j], ctx);
           pairings.push({
             white: colors.white,
@@ -234,9 +225,23 @@ const PairingEngine = (function () {
     return pairings;
   }
 
-  /**
-   * Build round pairings for a new round
-   */
+  function pairGroup(group, ctx, boardOffset) {
+    const swiss = pairGroupSwiss(group, ctx, boardOffset);
+    const pairedIds = new Set();
+    swiss.forEach((p) => {
+      pairedIds.add(p.white);
+      pairedIds.add(p.black);
+    });
+
+    const unpaired = group.filter((p) => !pairedIds.has(p.id));
+    if (unpaired.length === 0) {
+      return { pairings: swiss, remainder: [] };
+    }
+
+    const extra = pairGreedy(unpaired, ctx, boardOffset + swiss.length);
+    return { pairings: [...swiss, ...extra], remainder: [] };
+  }
+
   function buildRoundPairings(state) {
     const active = Storage.getActivePlayers(state);
     if (active.length < 2) {
@@ -284,7 +289,6 @@ const PairingEngine = (function () {
     return { pairings: allPairings, byePlayerId };
   }
 
-  // Legacy API compatibility
   function alreadyPlayed(idA, idB, state) {
     const ctx = buildContext(state);
     return hasPlayed(ctx, idA, idB);
