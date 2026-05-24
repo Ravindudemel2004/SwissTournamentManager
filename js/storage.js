@@ -12,8 +12,9 @@ const Storage = (function () {
     scoreDraw: 0.5,
     scoreLoss: 0,
     maxRematches: 0,
-    colorPriority: 'balance',
-    tieBreakOrder: ['buchholz', 'sonneborn', 'rating']
+    colorPriority: 'fide',
+    tieBreakOrder: ['buchholz', 'sonneborn', 'rating'],
+    initialColor: null // 'white' or 'black'
   };
 
   function createDefaultState(name) {
@@ -212,6 +213,7 @@ const Storage = (function () {
       if (p.active === undefined) p.active = true;
       if (p.rating === undefined) p.rating = 0;
       if (!p.club) p.club = '';
+      if (p.tpn === undefined) p.tpn = 0;
     });
     return data;
   }
@@ -261,8 +263,20 @@ const Storage = (function () {
       sonneborn: 0,
       colorBalance: 0,
       opponents: [],
-      byes: []
+      byes: [],
+      tpn: 0
     };
+  }
+
+  function assignTPNs(state) {
+    const players = state.players.slice().sort((a, b) => {
+      if (b.rating !== a.rating) return b.rating - a.rating;
+      return a.name.localeCompare(b.name);
+    });
+    players.forEach((p, idx) => {
+      const sp = state.players.find(sp => sp.id === p.id);
+      if (sp) sp.tpn = idx + 1;
+    });
   }
 
   return {
@@ -286,6 +300,7 @@ const Storage = (function () {
     saveTournamentToLibrary,
     loadTournamentFromLibrary,
     deleteTournamentFromLibrary,
-    syncToLibrary
+    syncToLibrary,
+    assignTPNs
   };
 })();

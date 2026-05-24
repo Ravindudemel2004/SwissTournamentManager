@@ -105,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
           Round ${round.number} — ${progress.completed}/${progress.total} games completed
           ${isLocked ? ' (Locked)' : ''}
           ${isCurrent ? ' — Current round' : ''}
+          <span class="badge" style="float:right; background:var(--primary);">FIDE Dutch System</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${progress.percent}%"></div></div>
       `;
@@ -169,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return `
         <tr>
           <td class="board-num">${pairing.board}</td>
-          <td colspan="2"><span class="player-name">${white ? App.escapeHtml(white.name) : '—'}</span> <span class="badge badge-round">BYE</span></td>
+          <td colspan="2"><span class="player-name">${white ? App.escapeHtml(white.name) : '—'} ${white && white.tpn ? `<small style="color:var(--text-muted)">(TPN ${white.tpn})</small>` : ''}</span> <span class="badge badge-round">BYE</span></td>
           <td><span class="badge badge-active">1.0</span></td>
         </tr>
       `;
@@ -192,12 +193,12 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="board-num">${pairing.board}</td>
         <td>
           <span class="color-white">♔</span>
-          <span class="player-name">${white ? App.escapeHtml(white.name) : '—'}</span>
+          <span class="player-name">${white ? App.escapeHtml(white.name) : '—'} ${white && white.tpn ? `<small style="color:var(--text-muted)">(TPN ${white.tpn})</small>` : ''}</span>
           <span class="player-club">${white && white.rating ? '(' + white.rating + ')' : ''}</span>
         </td>
         <td>
           <span class="color-black">♚</span>
-          <span class="player-name">${black ? App.escapeHtml(black.name) : '—'}</span>
+          <span class="player-name">${black ? App.escapeHtml(black.name) : '—'} ${black && black.tpn ? `<small style="color:var(--text-muted)">(TPN ${black.tpn})</small>` : ''}</span>
           <span class="player-club">${black && black.rating ? '(' + black.rating + ')' : ''}</span>
         </td>
         <td>${resultBtns}</td>

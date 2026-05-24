@@ -28,8 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setVal('settingScoreWin', s.scoreWin);
     setVal('settingScoreDraw', s.scoreDraw);
     setVal('settingScoreLoss', s.scoreLoss);
-    setVal('settingMaxRematches', s.maxRematches);
-    setVal('settingColorPriority', s.colorPriority);
 
     const tieOrder = s.tieBreakOrder || ['buchholz', 'sonneborn', 'rating'];
     document.querySelectorAll('[name="tieBreak"]').forEach((cb) => {
@@ -93,8 +91,8 @@ document.addEventListener('DOMContentLoaded', () => {
     s.scoreWin = parseFloat(document.getElementById('settingScoreWin').value) || 1;
     s.scoreDraw = parseFloat(document.getElementById('settingScoreDraw').value) || 0.5;
     s.scoreLoss = parseFloat(document.getElementById('settingScoreLoss').value) || 0;
-    s.maxRematches = clamp(parseInt(document.getElementById('settingMaxRematches').value, 10) || 0, 0, 5);
-    s.colorPriority = document.getElementById('settingColorPriority').value;
+    s.maxRematches = 0;
+    s.colorPriority = 'fide';
 
     const tieBreaks = [];
     document.querySelectorAll('[name="tieBreak"]:checked').forEach((cb) => {
