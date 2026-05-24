@@ -86,17 +86,67 @@
             </div>
 
             <div class="settings-section">
-              <h3>Tie-Break Priority</h3>
-              <p class="form-hint" style="margin-bottom:0.75rem">Order used after points (check all that apply)</p>
-              <label class="checkbox-label" style="display:block;margin-bottom:0.5rem">
-                <input type="checkbox" name="tieBreak" value="buchholz" checked> Buchholz
-              </label>
-              <label class="checkbox-label" style="display:block;margin-bottom:0.5rem">
-                <input type="checkbox" name="tieBreak" value="sonneborn" checked> Sonneborn-Berger
-              </label>
-              <label class="checkbox-label" style="display:block">
-                <input type="checkbox" name="tieBreak" value="rating" checked> Rating
-              </label>
+              <h3>Tie-Break Priority (FIDE C.07)</h3>
+              <p class="form-hint" style="margin-bottom:0.75rem">Drag to reorder. Check to enable. Uncheck to disable.</p>
+              
+              <ul id="tieBreakList" class="drag-list" style="list-style:none; padding:0; margin:0;">
+                <li class="drag-item" draggable="true" data-value="direct_encounter">
+                  <label style="display:flex; align-items:center; cursor:grab; margin:0; padding:0.5rem; border:1px solid var(--border); margin-bottom:0.25rem; border-radius:4px; background:var(--surface);">
+                    <span style="margin-right:0.5rem; color:var(--text-muted);">☰</span>
+                    <input type="checkbox" name="tieBreak" value="direct_encounter" checked style="margin-right:0.5rem;"> 
+                    Direct Encounter
+                  </label>
+                </li>
+                <li class="drag-item" draggable="true" data-value="buchholz_cut1">
+                  <label style="display:flex; align-items:center; cursor:grab; margin:0; padding:0.5rem; border:1px solid var(--border); margin-bottom:0.25rem; border-radius:4px; background:var(--surface);">
+                    <span style="margin-right:0.5rem; color:var(--text-muted);">☰</span>
+                    <input type="checkbox" name="tieBreak" value="buchholz_cut1" checked style="margin-right:0.5rem;"> 
+                    Buchholz Cut-1
+                  </label>
+                </li>
+                <li class="drag-item" draggable="true" data-value="buchholz">
+                  <label style="display:flex; align-items:center; cursor:grab; margin:0; padding:0.5rem; border:1px solid var(--border); margin-bottom:0.25rem; border-radius:4px; background:var(--surface);">
+                    <span style="margin-right:0.5rem; color:var(--text-muted);">☰</span>
+                    <input type="checkbox" name="tieBreak" value="buchholz" checked style="margin-right:0.5rem;"> 
+                    Buchholz
+                  </label>
+                </li>
+                <li class="drag-item" draggable="true" data-value="sonneborn">
+                  <label style="display:flex; align-items:center; cursor:grab; margin:0; padding:0.5rem; border:1px solid var(--border); margin-bottom:0.25rem; border-radius:4px; background:var(--surface);">
+                    <span style="margin-right:0.5rem; color:var(--text-muted);">☰</span>
+                    <input type="checkbox" name="tieBreak" value="sonneborn" checked style="margin-right:0.5rem;"> 
+                    Sonneborn-Berger
+                  </label>
+                </li>
+                <li class="drag-item" draggable="true" data-value="wins">
+                  <label style="display:flex; align-items:center; cursor:grab; margin:0; padding:0.5rem; border:1px solid var(--border); margin-bottom:0.25rem; border-radius:4px; background:var(--surface);">
+                    <span style="margin-right:0.5rem; color:var(--text-muted);">☰</span>
+                    <input type="checkbox" name="tieBreak" value="wins" checked style="margin-right:0.5rem;"> 
+                    Number of Wins
+                  </label>
+                </li>
+                <li class="drag-item" draggable="true" data-value="black_games">
+                  <label style="display:flex; align-items:center; cursor:grab; margin:0; padding:0.5rem; border:1px solid var(--border); margin-bottom:0.25rem; border-radius:4px; background:var(--surface);">
+                    <span style="margin-right:0.5rem; color:var(--text-muted);">☰</span>
+                    <input type="checkbox" name="tieBreak" value="black_games" style="margin-right:0.5rem;"> 
+                    Number of Games with Black
+                  </label>
+                </li>
+                <li class="drag-item" draggable="true" data-value="aro">
+                  <label style="display:flex; align-items:center; cursor:grab; margin:0; padding:0.5rem; border:1px solid var(--border); margin-bottom:0.25rem; border-radius:4px; background:var(--surface);">
+                    <span style="margin-right:0.5rem; color:var(--text-muted);">☰</span>
+                    <input type="checkbox" name="tieBreak" value="aro" style="margin-right:0.5rem;"> 
+                    Average Rating of Opponents (ARO)
+                  </label>
+                </li>
+                <li class="drag-item" draggable="true" data-value="rating">
+                  <label style="display:flex; align-items:center; cursor:grab; margin:0; padding:0.5rem; border:1px solid var(--border); margin-bottom:0.25rem; border-radius:4px; background:var(--surface);">
+                    <span style="margin-right:0.5rem; color:var(--text-muted);">☰</span>
+                    <input type="checkbox" name="tieBreak" value="rating" style="margin-right:0.5rem;"> 
+                    Rating
+                  </label>
+                </li>
+              </ul>
             </div>
           </div>
         </form>

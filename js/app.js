@@ -293,6 +293,20 @@ const App = (function () {
     const standings = Standings.calculateStandings(state);
     const preview = document.getElementById('standingsPreview');
     if (preview) {
+      const tbOrder = state.settings.tieBreakOrder || ['buchholz_cut1', 'buchholz', 'sonneborn'];
+      const topTb = tbOrder[0] || 'buchholz';
+      
+      const head = preview.closest('table').querySelector('thead tr');
+      if (head) {
+         head.innerHTML = `
+            <th>#</th>
+            <th>Player</th>
+            <th>Rating</th>
+            <th>Pts</th>
+            <th class="hide-mobile">${getTiebreakName(topTb)}</th>
+         `;
+      }
+      
       if (standings.length === 0) {
         preview.innerHTML = `<tr><td colspan="5" class="empty-state">No players yet. <a href="players.html">Add players</a></td></tr>`;
       } else {
@@ -302,7 +316,7 @@ const App = (function () {
             <td><span class="player-name">${escapeHtml(p.name)}</span></td>
             <td>${p.rating || '—'}</td>
             <td><strong>${formatPoints(p.points)}</strong></td>
-            <td class="hide-mobile">${p.buchholz.toFixed(1)}</td>
+            <td class="hide-mobile">${formatTiebreak(p, topTb)}</td>
           </tr>
         `).join('');
       }
@@ -354,6 +368,26 @@ const App = (function () {
 
     if (!tbody) return;
 
+    const tbOrder = state.settings.tieBreakOrder || ['buchholz_cut1', 'buchholz', 'sonneborn'];
+    const tb1 = tbOrder[0] || 'buchholz_cut1';
+    const tb2 = tbOrder[1] || 'buchholz';
+    const tb3 = tbOrder[2] || 'sonneborn';
+
+    const head = tbody.closest('table').querySelector('thead tr');
+    if (head) {
+       head.innerHTML = `
+          <th>Rank</th>
+          <th>Player</th>
+          <th>Rating</th>
+          <th>Pts</th>
+          <th>${getTiebreakName(tb1)}</th>
+          <th class="hide-mobile">${getTiebreakName(tb2)}</th>
+          <th class="hide-mobile">${getTiebreakName(tb3)}</th>
+          <th class="hide-mobile">Games</th>
+          <th class="hide-mobile">Colors</th>
+       `;
+    }
+
     if (standings.length === 0) {
       tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">🏆</div><h3>No standings yet</h3><p>Add players and play rounds to see standings</p></div></td></tr>`;
       return;
@@ -367,15 +401,39 @@ const App = (function () {
         <td><span class="player-name">${escapeHtml(p.name)}</span><br><span class="player-club hide-mobile">${escapeHtml(p.club || '')}</span></td>
         <td>${p.rating || '—'}</td>
         <td><strong>${formatPoints(p.points)}</strong></td>
-        <td>${p.buchholz.toFixed(1)}</td>
-        <td class="hide-mobile">${p.sonneborn.toFixed(1)}</td>
+        <td>${formatTiebreak(p, tb1)}</td>
+        <td class="hide-mobile">${formatTiebreak(p, tb2)}</td>
+        <td class="hide-mobile">${formatTiebreak(p, tb3)}</td>
         <td class="hide-mobile">${p.gamesPlayed}</td>
         <td class="hide-mobile">${p.colorBalance > 0 ? '+' + p.colorBalance : p.colorBalance}</td>
-        <td class="hide-mobile">${(p.opponents || []).length}</td>
       </tr>
     `
       )
       .join('');
+  }
+
+  function getTiebreakName(tie) {
+     if (tie === 'direct_encounter') return 'DE';
+     if (tie === 'buchholz_cut1') return 'BH-C1';
+     if (tie === 'buchholz') return 'BH';
+     if (tie === 'sonneborn') return 'SB';
+     if (tie === 'wins') return 'Wins';
+     if (tie === 'black_games') return 'Blacks';
+     if (tie === 'aro') return 'ARO';
+     if (tie === 'rating') return 'Rating';
+     return tie || '';
+  }
+
+  function formatTiebreak(p, tie) {
+     if (tie === 'direct_encounter') return '-';
+     if (tie === 'buchholz_cut1') return p.buchholz_cut1.toFixed(1);
+     if (tie === 'buchholz') return p.buchholz.toFixed(1);
+     if (tie === 'sonneborn') return p.sonneborn.toFixed(1);
+     if (tie === 'wins') return p.wins;
+     if (tie === 'black_games') return p.blackGames;
+     if (tie === 'aro') return p.aro;
+     if (tie === 'rating') return p.rating || 0;
+     return '';
   }
 
   return {

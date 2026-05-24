@@ -29,10 +29,18 @@ document.addEventListener('DOMContentLoaded', () => {
     setVal('settingScoreDraw', s.scoreDraw);
     setVal('settingScoreLoss', s.scoreLoss);
 
-    const tieOrder = s.tieBreakOrder || ['buchholz', 'sonneborn', 'rating'];
+    const tieOrder = s.tieBreakOrder || ['direct_encounter', 'buchholz_cut1', 'buchholz', 'sonneborn', 'wins'];
     document.querySelectorAll('[name="tieBreak"]').forEach((cb) => {
       cb.checked = tieOrder.includes(cb.value);
     });
+
+    const list = document.getElementById('tieBreakList');
+    if (list) {
+       tieOrder.forEach(val => {
+          const item = list.querySelector(`[data-value="${val}"]`);
+          if (item) list.appendChild(item);
+       });
+    }
   }
 
   function setVal(id, val) {
@@ -75,6 +83,47 @@ document.addEventListener('DOMContentLoaded', () => {
         App.toast(e.message, 'error');
       }
     });
+
+    const dragList = document.getElementById('tieBreakList');
+    if (dragList) {
+       let draggedItem = null;
+       dragList.addEventListener('dragstart', e => {
+           draggedItem = e.target.closest('.drag-item');
+           if (draggedItem) {
+               setTimeout(() => draggedItem.style.opacity = '0.5', 0);
+           }
+       });
+       dragList.addEventListener('dragend', e => {
+           if (draggedItem) {
+               draggedItem.style.opacity = '1';
+               draggedItem = null;
+               autoSave();
+           }
+       });
+       dragList.addEventListener('dragover', e => {
+           e.preventDefault();
+           if (!draggedItem) return;
+           const afterElement = getDragAfterElement(dragList, e.clientY);
+           if (afterElement == null) {
+               dragList.appendChild(draggedItem);
+           } else {
+               dragList.insertBefore(draggedItem, afterElement);
+           }
+       });
+    }
+  }
+
+  function getDragAfterElement(container, y) {
+       const draggableElements = [...container.querySelectorAll('.drag-item:not([style*="opacity: 0.5"])')];
+       return draggableElements.reduce((closest, child) => {
+           const box = child.getBoundingClientRect();
+           const offset = y - box.top - box.height / 2;
+           if (offset < 0 && offset > closest.offset) {
+               return { offset: offset, element: child };
+           } else {
+               return closest;
+           }
+       }, { offset: Number.NEGATIVE_INFINITY }).element;
   }
 
   function autoSave() {
@@ -95,10 +144,13 @@ document.addEventListener('DOMContentLoaded', () => {
     s.colorPriority = 'fide';
 
     const tieBreaks = [];
-    document.querySelectorAll('[name="tieBreak"]:checked').forEach((cb) => {
-      tieBreaks.push(cb.value);
+    document.querySelectorAll('#tieBreakList .drag-item').forEach((item) => {
+      const cb = item.querySelector('input[name="tieBreak"]');
+      if (cb && cb.checked) {
+        tieBreaks.push(cb.value);
+      }
     });
-    s.tieBreakOrder = tieBreaks.length ? tieBreaks : ['buchholz', 'sonneborn', 'rating'];
+    s.tieBreakOrder = tieBreaks.length ? tieBreaks : ['direct_encounter', 'buchholz_cut1', 'buchholz', 'sonneborn', 'wins'];
 
     App.save();
     Storage.saveTournamentToLibrary(state);
