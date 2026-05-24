@@ -49,6 +49,14 @@ const ExportManager = (function () {
     downloadFile(csv, getFileName(state, 'standings.csv'), 'text/csv');
   }
 
+  function safeExcelString(str) {
+    if (!str || str === 'pending') return 'pending';
+    if (str === '1-0' || str === '0-1' || str === '0.5-0.5' || str === '1/2-1/2') {
+      return `="${str}"`;
+    }
+    return str;
+  }
+
   function exportPairingsCSV(state, roundNumber) {
     const round = Storage.getRoundByNumber(state, roundNumber || state.currentRound);
     if (!round) {
@@ -63,7 +71,7 @@ const ExportManager = (function () {
         p.board,
         escapeCSV(white ? white.name : 'BYE'),
         escapeCSV(black ? black.name : 'BYE'),
-        p.result || 'pending'
+        escapeCSV(safeExcelString(p.result))
       ];
     });
 
@@ -114,7 +122,7 @@ const ExportManager = (function () {
         p.board,
         escapeCSV(white ? white.name : ''),
         escapeCSV(black ? black.name : 'BYE'),
-        p.isBye ? 'bye' : p.result || 'pending',
+        escapeCSV(safeExcelString(p.isBye ? 'bye' : p.result)),
         wPts !== null ? wPts : '',
         bPts !== null && bPts !== '' ? bPts : ''
       ];
